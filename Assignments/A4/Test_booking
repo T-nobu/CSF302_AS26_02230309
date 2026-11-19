@@ -1,0 +1,111 @@
+import random
+import unittest
+
+from booking import best_schedule, brute_force, greedy_earliest_finish, greedy_highest_fee
+
+ALL = (greedy_earliest_finish, greedy_highest_fee, best_schedule, brute_force)
+EXAMPLE = [(9, 12, 3000), (10, 16, 8000), (13, 17, 4000), (12, 14, 2500), (16, 18, 2000)]
+
+
+def random_requests(rng, n, equal_fee=False):
+    out = []
+    for _ in range(n):
+        s = rng.randint(0, 20)
+        out.append((s, s + rng.randint(1, 8), 100 if equal_fee else rng.randint(1, 100)))
+    return out
+
+
+class TestBooking(unittest.TestCase):
+    def assert_valid(self, requests, result):
+        """chosen indices are distinct, pairwise compatible, and add up to the reported total."""
+        total, chosen = result
+        self.assertEqual(len(set(chosen)), len(chosen))
+        self.assertEqual(total, sum(requests[i][2] for i in chosen))
+        for a in chosen:
+            for b in chosen:
+                if a < b:
+                    sa, fa, _ = requests[a]
+                    sb, fb, _ = requests[b]
+                    self.assertTrue(fa <= sb or fb <= sa, (requests, chosen))
+
+    def test_example_from_assignment(self):
+        self.assertEqual(greedy_earliest_finish(EXAMPLE), (7500, [0, 3, 4]))
+        self.assertEqual(best_schedule(EXAMPLE), (10000, [1, 4]))
+        self.assertEqual(brute_force(EXAMPLE)[0], 10000)
+
+    def test_dp_matches_brute_force_on_600_random_inputs(self):
+        rng = random.Random(1)
+        for _ in range(600):
+            reqs = random_requests(rng, rng.randint(0, 10))
+            dp, bf = best_schedule(reqs), brute_force(reqs)
+            self.assertEqual(dp[0], bf[0], reqs)
+            self.assert_valid(reqs, dp)
+            self.assert_valid(reqs, bf)
+
+    def test_greedy_results_are_valid_and_never_beat_optimum(self):
+        rng = random.Random(2)
+        for _ in range(300):
+            reqs = random_requests(rng, rng.randint(0, 10))
+            opt = best_schedule(reqs)[0]
+            for greedy in (greedy_earliest_finish, greedy_highest_fee):
+                res = greedy(reqs)
+                self.assert_valid(reqs, res)
+                self.assertLessEqual(res[0], opt)
+
+    def test_no_requests(self):
+        for f in ALL:
+            self.assertEqual(f([]), (0, []))
+
+    def test_one_request(self):
+        for f in ALL:
+            self.assertEqual(f([(5, 9, 700)]), (700, [0]))
+
+    def test_all_overlapping(self):
+        reqs = [(0, 10, 5), (2, 9, 8), (4, 12, 3), (1, 11, 6)]   # all contain time 5
+        for f in ALL:
+            total, chosen = f(reqs)
+            self.assertEqual(len(chosen), 1)
+        self.assertEqual(best_schedule(reqs), (8, [1]))
+
+    def test_none_overlapping(self):
+        reqs = [(0, 1, 10), (2, 3, 20), (4, 5, 30), (6, 7, 40)]
+        for f in ALL:
+            self.assertEqual(f(reqs), (100, [0, 1, 2, 3]))
+
+    def test_back_to_back_requests_both_fit(self):
+        reqs = [(9, 12, 100), (12, 15, 200)]                       # end at 12, start at 12
+        for f in ALL:
+            self.assertEqual(f(reqs), (300, [0, 1]))
+        self.assertEqual(best_schedule([(9, 12, 100), (11, 15, 200)])[1], [1])   # real overlap
+
+    def test_zero_length_and_identical_requests(self):
+        reqs = [(5, 5, 10), (5, 5, 10), (5, 8, 20), (5, 8, 20)]
+        for f in ALL:
+            self.assert_valid(reqs, f(reqs))
+        self.assertEqual(best_schedule(reqs)[0], brute_force(reqs)[0])
+
+    def test_equal_fees_earliest_finish_is_optimal(self):
+        rng = random.Random(3)
+        for _ in range(500):
+            reqs = random_requests(rng, rng.randint(0, 10), equal_fee=True)
+            self.assertEqual(greedy_earliest_finish(reqs)[0], brute_force(reqs)[0], reqs)
+        for _ in range(200):
+            reqs = random_requests(rng, 50, equal_fee=True)
+            self.assertEqual(greedy_earliest_finish(reqs)[0], best_schedule(reqs)[0])
+
+    def test_input_not_modified(self):
+        reqs = [(3, 5, 1), (0, 2, 4), (1, 6, 9)]
+        copy = reqs[:]
+        for f in ALL:
+            f(reqs)
+        self.assertEqual(reqs, copy)
+
+    def test_bad_input(self):
+        with self.assertRaises(ValueError):
+            best_schedule([(5, 3, 10)])
+        with self.assertRaises(ValueError):
+            brute_force([(0, 1, 1)] * 16)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,101 @@
+import random
+import pytest
+
+from sorts import quicksort_basic, quicksort_improved, quicksort_improved_3way
+
+ALL = [quicksort_basic, quicksort_improved, quicksort_improved_3way]
+IMPROVED = [quicksort_improved, quicksort_improved_3way]
+
+
+def check(sort, data, **kw):
+    a = list(data)
+    expected = sorted(data)          # sorted() used only to check answers
+    ref = a
+    result = sort(a, **kw)
+    assert result is None            # sorts in place
+    assert a is ref and a == expected
+
+
+@pytest.mark.parametrize("sort", ALL)
+def test_random_500(sort):
+    rng = random.Random(303)
+    for _ in range(500):
+        n = rng.randint(0, 80)
+        check(sort, [rng.randint(-1000, 1000) for _ in range(n)])
+
+
+@pytest.mark.parametrize("sort", ALL)
+def test_random_with_many_duplicates(sort):
+    rng = random.Random(5)
+    for _ in range(200):
+        check(sort, [rng.randint(0, 9) for _ in range(rng.randint(0, 80))])
+
+
+@pytest.mark.parametrize("sort", ALL)
+def test_empty(sort):
+    check(sort, [])
+
+
+@pytest.mark.parametrize("sort", ALL)
+def test_one_element(sort):
+    check(sort, [42])
+
+
+@pytest.mark.parametrize("sort", ALL)
+def test_two_elements(sort):
+    check(sort, [2, 1])
+    check(sort, [1, 2])
+    check(sort, [7, 7])
+
+
+@pytest.mark.parametrize("sort", ALL)
+def test_all_equal(sort):
+    check(sort, [7] * 100)
+
+
+@pytest.mark.parametrize("sort", ALL)
+def test_already_sorted(sort):
+    check(sort, list(range(200)))
+
+
+@pytest.mark.parametrize("sort", ALL)
+def test_reverse_sorted(sort):
+    check(sort, list(range(200, 0, -1)))
+
+
+@pytest.mark.parametrize("sort", ALL)
+def test_negative_numbers(sort):
+    check(sort, [-5, -1, -100, 0, 3, -7, -7, 2])
+    check(sort, [-3, -2, -1])
+    check(sort, [-1, -2, -3])
+
+
+@pytest.mark.parametrize("sort", IMPROVED)
+@pytest.mark.parametrize("cutoff", [0, 1, 2, 4, 8, 16, 32, 64, 1000])
+def test_all_cutoffs(sort, cutoff):
+    rng = random.Random(cutoff)
+    for _ in range(60):
+        check(sort, [rng.randint(-50, 50) for _ in range(rng.randint(0, 150))], cutoff=cutoff)
+
+
+@pytest.mark.parametrize("sort", IMPROVED)
+def test_improved_survives_large_sorted_input(sort):
+    """Depth stays O(log n): no RecursionError at the default limit."""
+    check(sort, list(range(100_000)))
+    check(sort, list(range(100_000, 0, -1)))
+
+
+def test_improved_survives_all_equal():
+    check(quicksort_improved, [3] * 2000)
+    check(quicksort_improved_3way, [3] * 100_000)
+
+
+def test_basic_hits_recursion_error_on_sorted_input():
+    """The bug from the scenario: depth ~ n on sorted input."""
+    with pytest.raises(RecursionError):
+        quicksort_basic(list(range(5000)))
+
+
+def test_basic_hits_recursion_error_on_all_equal():
+    with pytest.raises(RecursionError):
+        quicksort_basic([5] * 5000)

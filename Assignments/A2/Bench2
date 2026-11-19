@@ -1,0 +1,18 @@
+import json, signal, time
+from benchmark import make, best_time
+from closest import closest_pair, closest_pair_brute
+class TO(Exception): pass
+def h(*a): raise TO()
+signal.signal(signal.SIGALRM, h)
+out = json.load(open("bench.json"))
+for n in (16000, 32000, 64000):
+    pts = make(n)
+    dc = best_time(closest_pair, pts, 3)
+    signal.alarm(60); t0 = time.perf_counter()
+    try:
+        closest_pair_brute(pts); bt = time.perf_counter() - t0
+    except TO:
+        bt = None
+    signal.alarm(0)
+    out["table"].append([n, bt, dc]); json.dump(out, open("bench.json", "w"))
+    print(n, bt, dc, flush=True)

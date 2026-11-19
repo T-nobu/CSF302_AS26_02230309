@@ -1,0 +1,80 @@
+from bisect import bisect_right
+
+
+def _check(requests):
+    for s, f, fee in requests:
+        if f < s:
+            raise ValueError(f"finish before start: {(s, f, fee)}")
+
+
+def greedy_earliest_finish(requests):
+    """Sort by finish time and accept each request that fits. O(n log n)."""
+    _check(requests)
+    order = sorted(range(len(requests)), key=lambda i: (requests[i][1], requests[i][0], i))
+    chosen, last_finish, total = [], float("-inf"), 0
+    for i in order:
+        s, f, fee = requests[i]
+        if s >= last_finish:                 # fits after everything accepted so far
+            chosen.append(i)
+            last_finish = f
+            total += fee
+    return total, sorted(chosen)
+
+
+def greedy_highest_fee(requests):
+    """Sort by fee (highest first) and accept each request that fits. O(n^2) worst case."""
+    _check(requests)
+    order = sorted(range(len(requests)), key=lambda i: (-requests[i][2], requests[i][1], i))
+    chosen, total = [], 0
+    for i in order:
+        s, f, fee = requests[i]
+        # fits if, for every accepted request, one ends no later than the other starts
+        if all(f <= requests[j][0] or requests[j][1] <= s for j in chosen):
+            chosen.append(i)
+            total += fee
+    return total, sorted(chosen)
+
+
+def best_schedule(requests):
+    """Dynamic programming: OPT(j) = max(OPT(j-1), fee_j + OPT(p(j))). O(n log n)."""
+    _check(requests)
+    n = len(requests)
+    order = sorted(range(n), key=lambda i: (requests[i][1], requests[i][0], i))
+    finishes = [requests[i][1] for i in order]
+    # p[j] = number of requests among the first j (in finish order) that finish by start of request j
+    p = [bisect_right(finishes, requests[order[j]][0], 0, j) for j in range(n)]
+    opt = [0] * (n + 1)                      # opt[k] = best total using only the first k requests
+    for j in range(n):
+        opt[j + 1] = max(opt[j], requests[order[j]][2] + opt[p[j]])
+    chosen, k = [], n
+    while k > 0:                             # walk back through the table
+        if opt[k] == opt[k - 1]:
+            k -= 1                           # request k-1 is not needed
+        else:
+            chosen.append(order[k - 1])      # request k-1 is used; jump to p(k-1)
+            k = p[k - 1]
+    return opt[n], sorted(chosen)
+
+
+def brute_force(requests):
+    """Try every subset (checking only; n <= 15). O(n * 2^n)."""
+    _check(requests)
+    n = len(requests)
+    if n > 15:
+        raise ValueError("brute_force is for n <= 15")
+    by_start = sorted(range(n), key=lambda i: (requests[i][0], requests[i][1], i))
+    best_total, best_set = 0, []
+    for mask in range(1 << n):
+        last_finish, total, chosen, ok = float("-inf"), 0, [], True
+        for i in by_start:
+            if mask >> i & 1:
+                s, f, fee = requests[i]
+                if s < last_finish:          # overlaps the previous chosen request
+                    ok = False
+                    break
+                last_finish = f
+                total += fee
+                chosen.append(i)
+        if ok and total > best_total:
+            best_total, best_set = total, chosen
+    return best_total, sorted(best_set)

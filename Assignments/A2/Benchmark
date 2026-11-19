@@ -1,0 +1,38 @@
+import json, random, sys, time
+from closest import closest_pair, closest_pair_brute
+
+def best_time(f, pts, reps):
+    best = float("inf")
+    for _ in range(reps):
+        t = time.perf_counter(); f(pts); best = min(best, time.perf_counter() - t)
+    return best
+
+def make(n, seed=1):
+    rng = random.Random(seed)
+    return [(rng.uniform(0, 1_000_000), rng.uniform(0, 1_000_000)) for _ in range(n)]
+
+if __name__ == "__main__":
+    out = {"table": [], "crossover": {}}
+    # Crossover scan
+    scan = {}
+    for n in list(range(2, 60)) + list(range(60, 400, 10)):
+        pts = make(n)
+        reps = 200 if n < 100 else 40
+        scan[n] = (best_time(closest_pair_brute, pts, reps), best_time(closest_pair, pts, reps))
+    out["scan"] = {str(k): v for k, v in scan.items()}
+    json.dump(out, open("bench.json", "w"))
+    print("scan done", flush=True)
+    brute_stopped = False
+    n = 1000
+    while n <= 64000:
+        pts = make(n)
+        dc = best_time(closest_pair, pts, 3)
+        if not brute_stopped:
+            t0 = time.perf_counter(); closest_pair_brute(pts); bt = time.perf_counter() - t0
+            if bt > 60: brute_stopped = True
+        else:
+            bt = None
+        out["table"].append([n, bt, dc])
+        json.dump(out, open("bench.json", "w"))
+        print(n, bt, dc, flush=True)
+        n *= 2

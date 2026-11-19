@@ -1,0 +1,75 @@
+import json, random, signal, sys, threading, time
+from sorts import quicksort_basic, quicksort_improved, quicksort_improved_3way
+
+LIMIT = 60
+class Timeout(Exception): pass
+def _h(*a): raise Timeout()
+signal.signal(signal.SIGALRM, _h)
+
+def make(kind, n, seed=1):
+    rng = random.Random(seed)
+    if kind == "random": return [rng.randint(0, 10**6) for _ in range(n)]
+    if kind == "sorted": return list(range(n))
+    if kind == "duplicates": return [rng.randint(0, 9) for _ in range(n)]
+
+def run(sort, data, reps, **kw):
+    """-> ('ok', best_seconds) | ('RecursionError', secs) | ('timeout', 60)"""
+    best = float("inf")
+    for _ in range(reps):
+        a = list(data)
+        signal.alarm(LIMIT); t = time.perf_counter()
+        try:
+            sort(a, **kw)
+        except RecursionError:
+            signal.alarm(0); return ("RecursionError", time.perf_counter() - t)
+        except Timeout:
+            return ("timeout", LIMIT)
+        signal.alarm(0)
+        best = min(best, time.perf_counter() - t)
+        if best > 5: break
+    return ("ok", best)
+
+res = {"table": {}, "quad": [], "cutoff": {}, "vs_sorted": {}}
+def save(): json.dump(res, open("bench.json", "w"))
+
+SIZES = [1000 * 2**k for k in range(7)]
+ALGOS = {"basic": quicksort_basic, "improved": quicksort_improved, "improved_3way": quicksort_improved_3way}
+for kind in ("random", "sorted", "duplicates"):
+    res["table"][kind] = {}
+    stopped = set()
+    for n in SIZES:
+        data = make(kind, n)
+        row = {}
+        for name, f in ALGOS.items():
+            if name in stopped:
+                row[name] = ("timeout", LIMIT); continue
+            row[name] = run(f, data, 3)
+            if row[name][0] == "timeout": stopped.add(name)
+        res["table"][kind][n] = row
+        print(kind, n, row, flush=True); save()
+
+# --- Part C2: basic on sorted input with the recursion limit raised
+def quad():
+    sys.setrecursionlimit(200_000)
+    for n in (1000, 2000, 4000, 8000, 16000):
+        a = list(range(n))
+        t = time.perf_counter(); quicksort_basic(a); dt = time.perf_counter() - t
+        res["quad"].append([n, dt]); print("quad", n, dt, flush=True); save()
+threading.stack_size(512 * 1024 * 1024)
+th = threading.Thread(target=quad); th.start(); th.join()
+
+# --- Part C3 / C4: cutoff sweep and comparison with sorted()
+rng = random.Random(2026)
+data = [rng.randint(0, 10**6) for _ in range(100_000)]
+def best_of(f, reps=7):
+    b = 1e9
+    for _ in range(reps):
+        a = list(data); t = time.perf_counter(); f(a); b = min(b, time.perf_counter() - t)
+    return b
+for c in (1, 4, 8, 16, 32, 64):
+    res["cutoff"][c] = best_of(lambda a: quicksort_improved(a, cutoff=c)); print("cutoff", c, res["cutoff"][c], flush=True)
+best_c = min(res["cutoff"], key=res["cutoff"].get)
+res["best_cutoff"] = best_c
+res["vs_sorted"] = {"improved_best": res["cutoff"][best_c], "basic": best_of(quicksort_basic), "sorted": best_of(lambda a: a.sort())}
+res["vs_sorted"]["sorted_fn"] = best_of(lambda a: sorted(a))
+print(res["vs_sorted"], flush=True); save(); print("DONE")

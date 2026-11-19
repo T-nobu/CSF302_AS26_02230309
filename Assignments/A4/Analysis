@@ -1,0 +1,68 @@
+import random
+
+from booking import best_schedule, brute_force, greedy_earliest_finish, greedy_highest_fee
+
+rng = random.Random(4)
+
+
+def show(label, reqs):
+    opt = best_schedule(reqs)
+    print(f"{label}\n  requests (start, finish, fee): {reqs}")
+    print(f"  earliest finish : {greedy_earliest_finish(reqs)}")
+    print(f"  highest fee     : {greedy_highest_fee(reqs)}")
+    print(f"  optimal (DP)    : {opt}   brute force total: {brute_force(reqs)[0]}\n")
+
+
+def scenario_a(n):          # fee independent of length
+    out = []
+    for _ in range(n):
+        s = rng.randint(0, 200)
+        out.append((s, s + rng.randint(1, 30), rng.randint(500, 10000)))
+    return out
+
+
+def scenario_b(n):          # fee roughly proportional to length
+    out = []
+    for _ in range(n):
+        s, d = rng.randint(0, 200), rng.randint(1, 30)
+        out.append((s, s + d, int(d * 300 * rng.uniform(0.5, 1.5))))
+    return out
+
+
+def main():
+    print("=== C1: counterexamples ===")
+    e1 = [(9, 12, 1000), (10, 16, 8000)]
+    show("Earliest finish fails (2 requests):", e1)
+    assert greedy_earliest_finish(e1)[0] < best_schedule(e1)[0]
+    e2 = [(9, 17, 10000), (9, 13, 6000), (13, 17, 6000)]
+    show("Highest fee fails (3 requests):", e2)
+    assert greedy_highest_fee(e2)[0] < best_schedule(e2)[0]
+
+    print("=== Small random inputs (600 inputs of 0 to 10 requests): how often is each rule optimal? ===")
+    wins = {"earliest finish": 0, "highest fee": 0}
+    for _ in range(600):
+        reqs = [(s, s + rng.randint(1, 8), rng.randint(1, 100))
+                for s in (rng.randint(0, 20) for _ in range(rng.randint(0, 10)))]
+        opt = best_schedule(reqs)[0]
+        wins["earliest finish"] += greedy_earliest_finish(reqs)[0] == opt
+        wins["highest fee"] += greedy_highest_fee(reqs)[0] == opt
+    for k, v in wins.items():
+        print(f"  {k:<16}: optimal on {v} of 600 inputs ({v / 6:.1f}%)")
+
+    print("\n=== C3: ratio greedy / optimal, 1,000 random inputs of 50 requests ===")
+    print(f"{'scenario':<34} {'rule':<16} {'average':>8} {'worst':>8} {'optimal in':>11}")
+    for name, gen in (("A: fee independent of length", scenario_a),
+                      ("B: fee proportional to length", scenario_b)):
+        ratios = {"earliest finish": [], "highest fee": []}
+        for _ in range(1000):
+            reqs = gen(50)
+            opt = best_schedule(reqs)[0]
+            ratios["earliest finish"].append(greedy_earliest_finish(reqs)[0] / opt)
+            ratios["highest fee"].append(greedy_highest_fee(reqs)[0] / opt)
+        for rule, rs in ratios.items():
+            hit = sum(r == 1.0 for r in rs)
+            print(f"{name:<34} {rule:<16} {sum(rs) / len(rs):>8.3f} {min(rs):>8.3f} {hit:>8} /1000")
+
+
+if __name__ == "__main__":
+    main()

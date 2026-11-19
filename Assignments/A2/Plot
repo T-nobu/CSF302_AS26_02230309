@@ -1,0 +1,27 @@
+import json, math
+import matplotlib; matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+d = json.load(open("bench.json"))
+T = d["table"]
+ns = [r[0] for r in T]
+bn = [r[0] for r in T if r[1] is not None]; bt = [r[1] for r in T if r[1] is not None]
+dc = [r[2] for r in T]
+fig, ax = plt.subplots(1, 2, figsize=(11, 4.5))
+a = ax[0]
+a.loglog(bn, bt, "o-", label="brute force")
+a.loglog(ns, dc, "s-", label="divide and conquer")
+a.loglog(ns, [bt[0]*(n/ns[0])**2 for n in ns], "--", color="grey", lw=.8, label="~n² reference")
+a.loglog(ns, [dc[0]*(n*math.log2(n))/(ns[0]*math.log2(ns[0])) for n in ns], ":", color="grey", lw=.8, label="~n log n reference")
+if len(T) and T[-1][1] is None:
+    a.annotate("brute force stopped\n(>60 s)", (ns[-1], dc[-1]), textcoords="offset points", xytext=(-90, 40), arrowprops=dict(arrowstyle="->"))
+a.set_xlabel("n"); a.set_ylabel("time (s)"); a.set_title("Running time (log-log)"); a.legend(); a.grid(True, which="both", alpha=.3)
+s = {int(k): v for k, v in d["scan"].items()}
+k = sorted(s)
+b = ax[1]
+b.plot(k, [s[n][0]*1e6 for n in k], label="brute force")
+b.plot(k, [s[n][1]*1e6 for n in k], label="divide and conquer")
+b.axvline(36, color="red", ls="--", lw=.8); b.annotate("crossover n≈36", (36, 150), xytext=(60, 700), arrowprops=dict(arrowstyle="->"))
+b.set_xlabel("n"); b.set_ylabel("time (µs)"); b.set_title("Crossover region"); b.legend(); b.grid(alpha=.3)
+plt.tight_layout(); plt.savefig("timing.png", dpi=150)
+print("n  brute(s)  d&c(s)  ratio")
+for n, t, c in T: print(n, "%.4f"%t if t else ">60 (stopped)", "%.4f"%c, "%.0fx"%(t/c) if t else "-")
