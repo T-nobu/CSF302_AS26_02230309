@@ -1,0 +1,191 @@
+"""Q3: Dijkstra, Kruskal, Prim; MST verification and timing; Dijkstra with a negative edge.
+
+Graph file format: first line "V E", then E lines "u v w" (directed for Dijkstra, vertices 0..V-1).
+Usage: python q3_graphs.py [graph.txt]
+"""
+import heapq
+import random
+import sys
+import time
+
+random.seed(21)
+
+
+# ------------------------------------------------------------ Dijkstra (binary heap)
+def dijkstra(n, adj, src):
+    dist = [float("inf")] * n
+    parent = [-1] * n
+    done = [False] * n
+    dist[src] = 0
+    heap = [(0, src)]
+    while heap:
+        d, u = heapq.heappop(heap)
+        if done[u]:
+            continue
+        done[u] = True                       # u is final (only valid for non-negative weights)
+        for v, w in adj[u]:
+            if not done[v] and d + w < dist[v]:
+                dist[v] = d + w
+                parent[v] = u
+                heapq.heappush(heap, (dist[v], v))
+    return dist, parent
+
+
+def path_to(parent, v):
+    out = []
+    while v != -1:
+        out.append(v)
+        v = parent[v]
+    return out[::-1]
+
+
+def bellman_ford(n, edges, src):
+    dist = [float("inf")] * n
+    dist[src] = 0
+    for _ in range(n - 1):
+        for u, v, w in edges:
+            if dist[u] + w < dist[v]:
+                dist[v] = dist[u] + w
+    return dist
+
+
+def read_graph(path):
+    with open(path) as f:
+        n, m = map(int, f.readline().split())
+        edges = [tuple(map(int, f.readline().split())) for _ in range(m)]
+    return n, edges
+
+
+def directed_adj(n, edges):
+    adj = [[] for _ in range(n)]
+    for u, v, w in edges:
+        adj[u].append((v, w))
+    return adj
+
+
+def undirected_adj(n, edges):
+    adj = [[] for _ in range(n)]
+    for u, v, w in edges:
+        adj[u].append((v, w))
+        adj[v].append((u, w))
+    return adj
+
+
+# ------------------------------------------------------------ Kruskal (union-find)
+class UnionFind:
+    def __init__(self, n):
+        self.p = list(range(n))
+        self.rank = [0] * n
+
+    def find(self, x):
+        while self.p[x] != x:
+            self.p[x] = self.p[self.p[x]]
+            x = self.p[x]
+        return x
+
+    def union(self, a, b):
+        ra, rb = self.find(a), self.find(b)
+        if ra == rb:
+            return False
+        if self.rank[ra] < self.rank[rb]:
+            ra, rb = rb, ra
+        self.p[rb] = ra
+        if self.rank[ra] == self.rank[rb]:
+            self.rank[ra] += 1
+        return True
+
+
+def kruskal(n, edges):
+    uf, total, count = UnionFind(n), 0, 0
+    for u, v, w in sorted(edges, key=lambda e: e[2]):
+        if uf.union(u, v):
+            total += w
+            count += 1
+            if count == n - 1:
+                break
+    return total
+
+
+# ------------------------------------------------------------ Prim (binary heap)
+def prim(n, adj):
+    seen = [False] * n
+    heap = [(0, 0)]
+    total, count = 0, 0
+    while heap and count < n:
+        w, u = heapq.heappop(heap)
+        if seen[u]:
+            continue
+        seen[u] = True
+        total += w
+        count += 1
+        for v, wt in adj[u]:
+            if not seen[v]:
+                heapq.heappush(heap, (wt, v))
+    return total
+
+
+def random_connected_graph(n, m, max_w=1000):
+    edges, pairs = [], set()
+    for v in range(1, n):                     # random spanning tree keeps it connected
+        u = random.randrange(v)
+        pairs.add((u, v))
+        edges.append((u, v, random.randint(1, max_w)))
+    while len(edges) < m:
+        u, v = random.sample(range(n), 2)
+        if u > v:
+            u, v = v, u
+        if (u, v) not in pairs:
+            pairs.add((u, v))
+            edges.append((u, v, random.randint(1, max_w)))
+    return edges
+
+
+def best_time(fn, *args, repeat=3):
+    best = float("inf")
+    for _ in range(repeat):
+        t0 = time.perf_counter()
+        fn(*args)
+        best = min(best, time.perf_counter() - t0)
+    return best
+
+
+def main():
+    path = sys.argv[1] if len(sys.argv) > 1 else "sample_graph.txt"
+    n, edges = read_graph(path)
+    dist, parent = dijkstra(n, directed_adj(n, edges), 0)
+    print(f"=== Dijkstra from source 0 (graph: {path}, {n} vertices, {len(edges)} directed edges) ===")
+    print(f"{'vertex':>6} {'distance':>9}  path")
+    for v in range(n):
+        print(f"{v:>6} {dist[v]:>9}  {' -> '.join(map(str, path_to(parent, v)))}")
+
+    print("\n=== MST check: Kruskal vs Prim on 300 random connected graphs ===")
+    for _ in range(300):
+        v = random.randint(2, 60)
+        m = random.randint(v - 1, v * (v - 1) // 2)
+        g = random_connected_graph(v, m, random.choice([5, 100, 10**6]))
+        assert kruskal(v, g) == prim(v, undirected_adj(v, g)), (v, m)
+    print("All 300 graphs: both algorithms give the same total weight.")
+    demo = random_connected_graph(8, 14, 20)
+    print(f"Example (8 vertices, 14 edges): Kruskal = {kruskal(8, demo)}, Prim = {prim(8, undirected_adj(8, demo))}")
+
+    print("\n=== Timing, V = 1,000 (best of 3, seconds) ===")
+    print(f"{'graph':<22} {'edges':>8} {'Kruskal':>10} {'Prim':>10}")
+    V = 1000
+    for label, E in (("sparse (E = 3V)", 3 * V), ("dense (E = V^2/4)", V * V // 4)):
+        g = random_connected_graph(V, E)
+        adj = undirected_adj(V, g)
+        assert kruskal(V, g) == prim(V, adj)
+        tk, tp = best_time(kruskal, V, g), best_time(prim, V, adj)
+        print(f"{label:<22} {E:>8,} {tk:>10.4f} {tp:>10.4f}   winner: {'Kruskal' if tk < tp else 'Prim'}")
+
+    print("\n=== Dijkstra with a negative edge ===")
+    ne = [(0, 1, 2), (0, 2, 3), (2, 1, -2), (1, 3, 1)]
+    print("Edges (u, v, w):", ne)
+    d, _ = dijkstra(4, directed_adj(4, ne), 0)
+    print(f"Dijkstra distances from 0 : {d}")
+    print(f"Correct (Bellman-Ford)    : {bellman_ford(4, ne, 0)}")
+    print("Vertex 1 is finalised at 2 before the edge 2 -> 1 (weight -2) is seen; the true distance is 1.")
+
+
+if __name__ == "__main__":
+    main()

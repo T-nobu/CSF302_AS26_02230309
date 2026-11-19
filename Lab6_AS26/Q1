@@ -1,0 +1,101 @@
+"""Q1: Rod cutting - naive recursion, top-down memoization, bottom-up tabulation."""
+import sys
+import time
+
+BASE = [0, 1, 5, 8, 9, 10, 17, 17, 20, 24, 30]      # p[1..10]
+
+
+def price_table(n):
+    """Prices for lengths 0..n; p[i] = 3*i for i > 10."""
+    return [BASE[i] if i <= 10 else 3 * i for i in range(n + 1)]
+
+
+# ---------------------------------------------------------------- 1. naive
+def cut_naive(p, n, calls):
+    calls[0] += 1
+    if n == 0:
+        return 0
+    best = -1
+    for i in range(1, n + 1):
+        best = max(best, p[i] + cut_naive(p, n - i, calls))
+    return best
+
+
+# ---------------------------------------------------------------- 2. memoized
+def cut_memo(p, n, calls):
+    memo = [-1] * (n + 1)
+    first = [0] * (n + 1)
+
+    def solve(m):
+        calls[0] += 1
+        if memo[m] >= 0:
+            return memo[m]
+        if m == 0:
+            memo[0] = 0
+            return 0
+        best = -1
+        for i in range(1, m + 1):
+            val = p[i] + solve(m - i)
+            if val > best:
+                best, first[m] = val, i
+        memo[m] = best
+        return best
+
+    return solve(n), first
+
+
+# ---------------------------------------------------------------- 3. bottom-up
+def cut_bottom_up(p, n):
+    r = [0] * (n + 1)
+    first = [0] * (n + 1)
+    for m in range(1, n + 1):
+        best = -1
+        for i in range(1, m + 1):
+            if p[i] + r[m - i] > best:
+                best, first[m] = p[i] + r[m - i], i
+        r[m] = best
+    return r[n], first
+
+
+def pieces(first, n):
+    out = []
+    while n > 0:
+        out.append(first[n])
+        n -= first[n]
+    return out
+
+
+def timed(fn, *a):
+    t0 = time.perf_counter()
+    res = fn(*a)
+    return res, time.perf_counter() - t0
+
+
+def main():
+    sys.setrecursionlimit(10000)
+
+    print("=== Maximum revenue and pieces, n = 1..10 ===")
+    p = price_table(10)
+    print(f"{'n':>3} {'revenue':>8}   pieces")
+    for n in range(1, 11):
+        naive = cut_naive(p, n, [0])
+        (memo, f_m), (bu, f_b) = cut_memo(p, n, [0]), cut_bottom_up(p, n)
+        assert naive == memo == bu
+        print(f"{n:>3} {bu:>8}   {pieces(f_b, n)}")
+
+    print("\n=== Recursive calls and time (p[i] = 3*i for i > 10) ===")
+    print(f"{'n':>3} | {'naive calls':>12} {'naive (s)':>10} | {'memo calls':>11} {'memo (s)':>9} | "
+          f"{'bottom-up inner loops':>21} {'bu (s)':>9}")
+    for n in (5, 10, 15, 20, 25):
+        p = price_table(n)
+        c1, c2 = [0], [0]
+        r1, t1 = timed(cut_naive, p, n, c1)
+        (r2, _), t2 = timed(cut_memo, p, n, c2)
+        (r3, _), t3 = timed(cut_bottom_up, p, n)
+        assert r1 == r2 == r3
+        loops = n * (n + 1) // 2
+        print(f"{n:>3} | {c1[0]:>12,} {t1:>10.4f} | {c2[0]:>11,} {t2:>9.6f} | {loops:>21,} {t3:>9.6f}")
+
+
+if __name__ == "__main__":
+    main()

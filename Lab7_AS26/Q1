@@ -1,0 +1,115 @@
+"""Q1: Activity selection (3 greedy rules) and knapsack (fractional, 0/1 greedy vs DP).
+
+Usage: python q1_activity_knapsack.py [activities.txt]   (one "start finish" pair per line)
+"""
+import random
+import sys
+
+random.seed(11)
+
+RULES = {
+    "earliest finish": lambda a: (a[1], a[0]),
+    "earliest start": lambda a: (a[0], a[1]),
+    "shortest duration": lambda a: (a[1] - a[0], a[1]),
+}
+
+
+def select(acts, rule="earliest finish"):
+    chosen, last = [], float("-inf")
+    for a in sorted(acts, key=RULES[rule]):
+        if a[0] >= last:              # compatible with everything chosen so far
+            chosen.append(a)
+            last = a[1]
+    return chosen
+
+
+def find_counterexample(rule):
+    """Random search (smallest n first) for an input where `rule` beats nothing: it picks fewer."""
+    for n in range(3, 9):
+        for _ in range(50000):
+            acts = [(s, s + random.randint(1, 6)) for s in (random.randint(0, 10) for _ in range(n))]
+            if len(select(acts, rule)) < len(select(acts)):
+                return acts
+    return None
+
+
+def fractional_knapsack(items, cap):
+    """items = (value, weight). Highest value/weight first, split the last item."""
+    total, taken = 0.0, []
+    for v, w in sorted(items, key=lambda it: it[0] / it[1], reverse=True):
+        if cap <= 0:
+            break
+        part = min(w, cap)
+        total += v * part / w
+        taken.append(((v, w), part / w))
+        cap -= part
+    return total, taken
+
+
+def greedy_01(items, cap):
+    total, taken = 0, []
+    for v, w in sorted(items, key=lambda it: it[0] / it[1], reverse=True):
+        if w <= cap:
+            cap -= w
+            total += v
+            taken.append((v, w))
+    return total, taken
+
+
+def dp_01(items, cap):
+    best = [0] * (cap + 1)
+    for v, w in items:
+        for c in range(cap, w - 1, -1):
+            best[c] = max(best[c], best[c - w] + v)
+    return best[cap]
+
+
+def main():
+    path = sys.argv[1] if len(sys.argv) > 1 else "sample_activities.txt"
+    acts = [tuple(map(int, line.split())) for line in open(path) if line.strip()]
+    print(f"=== Activity selection (input: {path}) ===")
+    print(f"{len(acts)} activities (start, finish): {acts}")
+    sel = select(acts)
+    print(f"Earliest finish selects {len(sel)}: {sel}\n")
+
+    print("=== Counterexamples found by random testing ===")
+    for rule in ("earliest start", "shortest duration"):
+        ex = find_counterexample(rule)
+        print(f"{rule}:")
+        print(f"  input           : {ex}")
+        print(f"  {rule:<16}: {len(select(ex, rule))} -> {select(ex, rule)}")
+        print(f"  earliest finish : {len(select(ex))} -> {select(ex)}\n")
+
+    print("=== Fractional knapsack (values 60,100,120; weights 10,20,30; capacity 50) ===")
+    items, cap = [(60, 10), (100, 20), (120, 30)], 50
+    total, taken = fractional_knapsack(items, cap)
+    for (v, w), frac in taken:
+        print(f"  item value={v:>3} weight={w:>2}: take {frac:.2%}")
+    print(f"Fractional optimum = {total:.2f}")
+    g, gt = greedy_01(items, cap)
+    print(f"Same rule on 0/1 knapsack = {g}  (items {gt}),  DP optimum = {dp_01(items, cap)}\n")
+
+    print("=== 0/1 knapsack: ratio-greedy vs DP on random inputs ===")
+    worst, worst_case, trials = 1.0, None, 100000
+    for _ in range(trials):
+        n = random.randint(2, 8)
+        its = [(random.randint(1, 30), random.randint(1, 20)) for _ in range(n)]
+        cap = random.randint(5, 40)
+        opt = dp_01(its, cap)
+        if opt == 0:
+            continue
+        gv = greedy_01(its, cap)[0]
+        assert gv <= opt
+        if gv / opt < worst:
+            worst, worst_case = gv / opt, (its, cap, gv, opt)
+    its, cap, gv, opt = worst_case
+    print(f"{trials:,} random trials. Worst greedy/optimal ratio found: {worst:.3f}")
+    print(f"  items (value, weight): {its}")
+    print(f"  capacity {cap}: greedy = {gv}, optimal = {opt}")
+    print("Constructed bad case: items (2,1) and (100,100) with capacity 100 -> "
+          f"greedy = {greedy_01([(2, 1), (100, 100)], 100)[0]}, optimal = {dp_01([(2, 1), (100, 100)], 100)}"
+          " (ratio 0.02; it can be made arbitrarily small)")
+
+
+if __name__ == "__main__":
+    main()

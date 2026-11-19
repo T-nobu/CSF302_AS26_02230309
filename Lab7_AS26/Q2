@@ -1,0 +1,81 @@
+"""Q2: Huffman coding - tree, code table, encode/decode round trip, compression ratio.
+
+Usage: python q2_huffman.py [file1 file2 ...]   (defaults to english.txt dna.txt source_code.txt)
+"""
+import heapq
+import sys
+from collections import Counter
+
+
+def build_tree(text):
+    freq = Counter(text)
+    heap = [(f, i, ch) for i, (ch, f) in enumerate(sorted(freq.items()))]   # leaf = a character
+    heapq.heapify(heap)
+    uid = len(heap)
+    while len(heap) > 1:
+        f1, _, a = heapq.heappop(heap)
+        f2, _, b = heapq.heappop(heap)
+        heapq.heappush(heap, (f1 + f2, uid, (a, b)))                     # internal node = (left, right)
+        uid += 1
+    return heap[0][2], freq
+
+
+def make_codes(root):
+    if isinstance(root, str):                  # file with a single distinct symbol
+        return {root: "0"}
+    codes, stack = {}, [(root, "")]
+    while stack:
+        node, prefix = stack.pop()
+        if isinstance(node, str):
+            codes[node] = prefix
+        else:
+            stack.append((node[0], prefix + "0"))
+            stack.append((node[1], prefix + "1"))
+    return codes
+
+
+def encode(text, codes):
+    return "".join(codes[ch] for ch in text)
+
+
+def decode(bits, root):
+    if isinstance(root, str):
+        return root * len(bits)
+    out, node = [], root
+    for b in bits:
+        node = node[int(b)]
+        if isinstance(node, str):
+            out.append(node)
+            node = root
+    return "".join(out)
+
+
+def show_table(codes, freq):
+    print(f"{'char':>6} {'freq':>7}  code")
+    for ch in sorted(codes, key=lambda c: (len(codes[c]), c)):
+        print(f"{ch!r:>6} {freq[ch]:>7}  {codes[ch]}")
+
+
+def main():
+    files = sys.argv[1:] or ["english.txt", "dna.txt", "source_code.txt"]
+    results = []
+    for idx, path in enumerate(files):
+        text = open(path, encoding="utf-8").read()
+        root, freq = build_tree(text)
+        codes = make_codes(root)
+        if idx == 0:
+            print(f"=== Code table for {path} ({len(freq)} distinct characters) ===")
+            show_table(codes, freq)
+            print()
+        bits = encode(text, codes)
+        assert decode(bits, root) == text
+        results.append((path, len(text), len(freq), 8 * len(text), len(bits)))
+
+    print("=== Round trip and compression ratio (vs 8-bit fixed-length) ===")
+    for path, n, d, fixed, huff in results:
+        print(f"{path}: {n:,} chars, {d} distinct | fixed {fixed:,} bits | Huffman {huff:,} bits | "
+              f"ratio {huff / fixed:.3f} | saved {1 - huff / fixed:.1%} | decoded == original: True")
+
+
+if __name__ == "__main__":
+    main()

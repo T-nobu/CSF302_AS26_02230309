@@ -1,0 +1,109 @@
+"""Q3: Longest common subsequence - table, reconstruction, two-row version, brute force, diff.
+
+Usage: python q3_lcs.py [old.txt new.txt]   (defaults to sample_old.txt / sample_new.txt)
+"""
+import random
+import sys
+import time
+
+random.seed(5)
+
+
+def lcs_table(x, y):
+    m, n = len(x), len(y)
+    c = [[0] * (n + 1) for _ in range(m + 1)]
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            if x[i - 1] == y[j - 1]:
+                c[i][j] = c[i - 1][j - 1] + 1
+            else:
+                c[i][j] = max(c[i - 1][j], c[i][j - 1])
+    return c
+
+
+def lcs_string(c, x, y):
+    i, j, out = len(x), len(y), []
+    while i > 0 and j > 0:
+        if x[i - 1] == y[j - 1]:
+            out.append(x[i - 1]); i -= 1; j -= 1
+        elif c[i - 1][j] >= c[i][j - 1]:
+            i -= 1
+        else:
+            j -= 1
+    return out[::-1]
+
+
+def lcs_length_two_rows(x, y):
+    prev = [0] * (len(y) + 1)
+    for i in range(1, len(x) + 1):
+        cur = [0] * (len(y) + 1)
+        for j in range(1, len(y) + 1):
+            cur[j] = prev[j - 1] + 1 if x[i - 1] == y[j - 1] else max(prev[j], cur[j - 1])
+        prev = cur
+    return prev[-1]
+
+
+def is_subsequence(sub, s):
+    it = iter(s)
+    return all(ch in it for ch in sub)
+
+
+def lcs_brute(x, y):
+    """Try every subsequence of x (2^|x| of them) and test it against y."""
+    best = 0
+    n = len(x)
+    for mask in range(1 << n):
+        sub = [x[i] for i in range(n) if mask >> i & 1]
+        if len(sub) > best and is_subsequence(sub, y):
+            best = len(sub)
+    return best
+
+
+def print_table(c, x, y):
+    print("      " + "  ".join(f"{ch:>2}" for ch in " " + y))
+    for i, row in enumerate(c):
+        label = " " if i == 0 else x[i - 1]
+        print(f"  {label}   " + "  ".join(f"{v:>2}" for v in row))
+
+
+def diff(a, b):
+    c = lcs_table(a, b)
+    i, j, out = len(a), len(b), []
+    while i > 0 or j > 0:
+        if i > 0 and j > 0 and a[i - 1] == b[j - 1]:
+            out.append("  " + a[i - 1]); i -= 1; j -= 1
+        elif j > 0 and (i == 0 or c[i][j - 1] >= c[i - 1][j]):
+            out.append("+ " + b[j - 1]); j -= 1
+        else:
+            out.append("- " + a[i - 1]); i -= 1
+    return out[::-1]
+
+
+def main():
+    x, y = "ABCBDAB", "BDCABA"
+    c = lcs_table(x, y)
+    print(f"=== LCS table for X = {x}, Y = {y} ===")
+    print_table(c, x, y)
+    print(f"\nLCS length        : {c[len(x)][len(y)]}")
+    print(f"One LCS           : {''.join(lcs_string(c, x, y))}")
+    print(f"Two-row version   : {lcs_length_two_rows(x, y)}")
+
+    print("\n=== DP vs brute force (random strings over ABCD, both of length L) ===")
+    print(f"{'L':>3} {'LCS':>4} {'DP (s)':>12} {'brute force (s)':>16}")
+    for L in range(5, 19):
+        a = "".join(random.choice("ABCD") for _ in range(L))
+        b = "".join(random.choice("ABCD") for _ in range(L))
+        t0 = time.perf_counter(); d = lcs_table(a, b)[L][L]; td = time.perf_counter() - t0
+        t0 = time.perf_counter(); bf = lcs_brute(a, b); tb = time.perf_counter() - t0
+        assert d == bf == lcs_length_two_rows(a, b)
+        print(f"{L:>3} {d:>4} {td:>12.6f} {tb:>16.4f}")
+
+    f1, f2 = (sys.argv[1], sys.argv[2]) if len(sys.argv) == 3 else ("sample_old.txt", "sample_new.txt")
+    old = open(f1).read().splitlines()
+    new = open(f2).read().splitlines()
+    print(f"\n=== Line diff: {f1} -> {f2} ===")
+    print("\n".join(diff(old, new)))
+
+
+if __name__ == "__main__":
+    main()

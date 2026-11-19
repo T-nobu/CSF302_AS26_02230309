@@ -1,0 +1,113 @@
+"""Q4: Randomized quickselect, Miller-Rabin primality test, Carmichael number 561."""
+import math
+import random
+import time
+
+rng = random.Random(8)
+
+
+# ------------------------------------------------------------ Quickselect
+def quickselect(a, k):
+    """k-th smallest (1-based), random pivot, expected O(n)."""
+    lst = a
+    while True:
+        p = rng.choice(lst)
+        lows = [x for x in lst if x < p]
+        if k <= len(lows):
+            lst = lows
+            continue
+        eq = lst.count(p)
+        if k <= len(lows) + eq:
+            return p
+        k -= len(lows) + eq
+        lst = [x for x in lst if x > p]
+
+
+def best_time(fn, repeat=3):
+    best = float("inf")
+    for _ in range(repeat):
+        t0 = time.perf_counter()
+        fn()
+        best = min(best, time.perf_counter() - t0)
+    return best
+
+
+# ------------------------------------------------------------ Miller-Rabin
+def mr_round(n, a):
+    """One round with base a. True = 'probably prime', False = definitely composite."""
+    d, s = n - 1, 0
+    while d % 2 == 0:
+        d //= 2
+        s += 1
+    x = pow(a, d, n)
+    if x == 1 or x == n - 1:
+        return True
+    for _ in range(s - 1):
+        x = x * x % n
+        if x == n - 1:
+            return True
+    return False
+
+
+def miller_rabin(n, rounds=20):
+    if n < 2:
+        return False
+    for p in (2, 3, 5, 7, 11, 13):
+        if n % p == 0:
+            return n == p
+    return all(mr_round(n, rng.randrange(2, n - 1)) for _ in range(rounds))
+
+
+def trial_division(n):
+    if n < 2:
+        return False
+    if n % 2 == 0:
+        return n == 2
+    for d in range(3, math.isqrt(n) + 1, 2):
+        if n % d == 0:
+            return False
+    return True
+
+
+def main():
+    print("=== Randomized quickselect vs sorting (median, best of 3, seconds) ===")
+    print(f"{'n':>10} {'quickselect':>12} {'sort + index':>13}")
+    for n in (10**4, 3 * 10**4, 10**5, 3 * 10**5, 10**6):
+        a = [rng.randint(0, 10**9) for _ in range(n)]
+        k = n // 2
+        assert quickselect(a, k) == sorted(a)[k - 1]
+        tq = best_time(lambda: quickselect(a, k))
+        ts = best_time(lambda: sorted(a)[k - 1])
+        print(f"{n:>10,} {tq:>12.4f} {ts:>13.4f}")
+
+    print("\n=== Miller-Rabin (20 rounds) vs trial division on 12-digit numbers ===")
+    nums = [rng.randrange(10**11, 10**12) for _ in range(20)]
+    print(f"{'number':>14} {'Miller-Rabin':>13} {'trial div.':>11} {'agree':>6}")
+    t_mr = t_td = 0.0
+    for n in nums:
+        t0 = time.perf_counter(); a = miller_rabin(n); t_mr += time.perf_counter() - t0
+        t0 = time.perf_counter(); b = trial_division(n); t_td += time.perf_counter() - t0
+        assert a == b
+        print(f"{n:>14} {'prime' if a else 'composite':>13} {'prime' if b else 'composite':>11} {str(a == b):>6}")
+    print(f"Total time: Miller-Rabin {t_mr:.5f} s, trial division {t_td:.5f} s")
+    primes = []
+    while len(primes) < 5:                       # random 12-digit numbers are rarely prime, so find some
+        c = rng.randrange(10**11, 10**12) | 1
+        if miller_rabin(c):
+            primes.append(c)
+    t0 = time.perf_counter(); ok_mr = all(miller_rabin(p) for p in primes); t_mr = time.perf_counter() - t0
+    t0 = time.perf_counter(); ok_td = all(trial_division(p) for p in primes); t_td = time.perf_counter() - t0
+    print(f"5 primes found by Miller-Rabin {primes}")
+    print(f"  confirmed by both: {ok_mr and ok_td}; Miller-Rabin {t_mr:.5f} s, trial division {t_td:.4f} s")
+
+    print("\n=== Carmichael number 561 = 3 x 11 x 17, one round, 1,000 runs ===")
+    n, runs = 561, 1000
+    said_prime = sum(mr_round(n, rng.randrange(2, n - 1)) for _ in range(runs))
+    liars = sum(mr_round(n, a) for a in range(2, n - 1))
+    print(f"Answered 'prime' in {said_prime} of {runs} runs ({said_prime / runs:.1%})")
+    print(f"Exact fraction of bases that fool one round: {liars}/{n - 3} = {liars / (n - 3):.1%} "
+          "(theory: at most 25%)")
+
+
+if __name__ == "__main__":
+    main()

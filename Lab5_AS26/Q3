@@ -1,0 +1,141 @@
+"""Q3: Counting inversions + Kendall tau distance between two movie rankings.
+
+Usage:  python q3_inversions.py            (verification, timing, then the movie program)
+        python q3_inversions.py --quick    (smaller sizes for testing, skips keyboard input)
+"""
+import argparse
+import random
+import time
+
+random.seed(7)
+
+
+# ------------------------------------------------------------ Brute force O(n^2)
+def inversions_brute(a, time_limit=None):
+    """Check every pair. Returns None if time_limit (seconds) is exceeded."""
+    n = len(a)
+    count = 0
+    t0 = time.perf_counter()
+    for i in range(n - 1):
+        ai = a[i]
+        for j in range(i + 1, n):
+            if ai > a[j]:
+                count += 1
+        if time_limit is not None and i % 64 == 0 and time.perf_counter() - t0 > time_limit:
+            return None
+    return count
+
+
+# ------------------------------------------------------------ Merge sort O(n log n)
+def inversions_merge(a):
+    """Returns (sorted_list, inversion_count)."""
+    n = len(a)
+    if n <= 1:
+        return a[:], 0
+    mid = n // 2
+    left, inv_l = inversions_merge(a[:mid])
+    right, inv_r = inversions_merge(a[mid:])
+    out, i, j, inv = [], 0, 0, inv_l + inv_r
+    while i < len(left) and j < len(right):
+        if left[i] <= right[j]:
+            out.append(left[i]); i += 1
+        else:
+            out.append(right[j]); j += 1
+            inv += len(left) - i       # right[j] is smaller than ALL remaining left items
+    out.extend(left[i:])
+    out.extend(right[j:])
+    return out, inv
+
+
+def verify():
+    print("=== Verification on random arrays (size up to 2,000) ===")
+    for n in [1, 2, 5, 10, 50, 100, 500, 1000, 2000]:
+        for _ in range(5):
+            a = [random.randint(0, 10**6) for _ in range(n)]
+            assert inversions_brute(a) == inversions_merge(a)[1], n
+        print(f"n = {n:>5}: brute force and merge-sort counts agree (5 random arrays)")
+    print()
+
+
+def timing(quick):
+    print("=== Timing (brute force stopped once it exceeds 60 s) ===")
+    sizes = [1000, 2000, 4000, 8000, 16000, 32000, 64000, 128000, 256000, 512000, 1000000]
+    if quick:
+        sizes = [1000, 2000, 4000]
+    limit = 5 if quick else 60
+    print(f"{'n':>10} {'brute (s)':>12} {'merge (s)':>12}")
+    brute_active = True
+    for n in sizes:
+        a = [random.randint(0, 10**9) for _ in range(n)]
+        t0 = time.perf_counter()
+        inv_m = inversions_merge(a)[1]
+        tm = time.perf_counter() - t0
+        if brute_active:
+            t0 = time.perf_counter()
+            inv_b = inversions_brute(a, limit)
+            tb = time.perf_counter() - t0
+            if inv_b is None:
+                brute_active = False
+                bstr = f">{limit} (stopped)"
+            else:
+                assert inv_b == inv_m
+                bstr = f"{tb:.3f}"
+        else:
+            bstr = "skipped"
+        print(f"{n:>10,} {bstr:>12} {tm:>12.3f}")
+    print()
+
+
+# ------------------------------------------------------------ Kendall tau
+def read_ranking(user, n=10):
+    print(f"\n{user}: enter your {n} movies from FAVOURITE (1st) to LEAST favourite, one per line.")
+    movies = []
+    while len(movies) < n:
+        title = input(f"  #{len(movies) + 1}: ").strip()
+        if not title:
+            print("  (empty title, try again)")
+        elif title.lower() in [m.lower() for m in movies]:
+            print("  (already entered, try again)")
+        else:
+            movies.append(title)
+    return movies
+
+
+def kendall_tau(rank1, rank2):
+    """Kendall tau distance = number of pairs the two rankings order differently."""
+    lower = [m.lower() for m in rank2]
+    position_in_2 = {m.lower(): i for i, m in enumerate(rank2)}
+    # Relabel rank1's movies by their position in rank2; inversions of that sequence
+    # are exactly the pairs on which the two users disagree.
+    sequence = [position_in_2[m.lower()] for m in rank1]
+    return inversions_merge(sequence)[1]
+
+
+def movie_program():
+    n = 10
+    print("=== Kendall tau similarity between two users' rankings ===")
+    r1 = read_ranking("User 1", n)
+    while True:
+        r2 = read_ranking("User 2", n)
+        if {m.lower() for m in r1} == {m.lower() for m in r2}:
+            break
+        print("User 2 must rank exactly the same 10 movies as User 1. Please re-enter.")
+    d = kendall_tau(r1, r2)
+    max_d = n * (n - 1) // 2
+    print(f"\nKendall tau distance : {d} (0 = identical, {max_d} = fully reversed)")
+    print(f"Similarity           : {1 - d / max_d:.2%}   (= 1 - d / {max_d})")
+    print(f"Kendall tau coeff.   : {1 - 2 * d / max_d:+.3f}   (+1 identical, -1 opposite)")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--quick", action="store_true")
+    args = ap.parse_args()
+    verify()
+    timing(args.quick)
+    if not args.quick:
+        movie_program()
+
+
+if __name__ == "__main__":
+    main()

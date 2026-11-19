@@ -1,0 +1,182 @@
+"""Q1: Quicksort variants - comparison counts and running time.
+
+Variants : Lomuto (last pivot), Hoare (first pivot), randomised (Lomuto + random pivot),
+           three-way (Dutch national flag, last pivot).
+Inputs   : random, sorted, reverse sorted, many duplicates (0..9).
+Sizes    : 1000, 2000, 4000, 8000, 16000.
+
+Every variant recurses on the SMALLER part and loops on the LARGER part,
+so the recursion depth is at most log2(n) even when the split is 1 : n-1.
+
+Usage:  python q1_quicksort_variants.py            (full run)
+        python q1_quicksort_variants.py --max-n 4000   (faster)
+"""
+import argparse
+import csv
+import random
+import time
+
+random.seed(42)
+
+
+# ---------------------------------------------------------------- Lomuto
+def lomuto_partition(a, lo, hi, c):
+    pivot = a[hi]
+    i = lo - 1
+    for j in range(lo, hi):
+        c[0] += 1                      # one comparison: a[j] <= pivot
+        if a[j] <= pivot:
+            i += 1
+            a[i], a[j] = a[j], a[i]
+    a[i + 1], a[hi] = a[hi], a[i + 1]
+    return i + 1
+
+
+def quick_lomuto(a, lo, hi, c):
+    while lo < hi:
+        p = lomuto_partition(a, lo, hi, c)
+        if p - lo < hi - p:            # left part smaller -> recurse on it
+            quick_lomuto(a, lo, p - 1, c)
+            lo = p + 1                 # loop on the larger right part
+        else:
+            quick_lomuto(a, p + 1, hi, c)
+            hi = p - 1
+
+
+# ---------------------------------------------------------------- Hoare
+def hoare_partition(a, lo, hi, c):
+    pivot = a[lo]
+    i, j = lo - 1, hi + 1
+    while True:
+        i += 1
+        c[0] += 1
+        while a[i] < pivot:
+            i += 1
+            c[0] += 1
+        j -= 1
+        c[0] += 1
+        while a[j] > pivot:
+            j -= 1
+            c[0] += 1
+        if i >= j:
+            return j
+        a[i], a[j] = a[j], a[i]
+
+
+def quick_hoare(a, lo, hi, c):
+    while lo < hi:
+        p = hoare_partition(a, lo, hi, c)      # parts are [lo..p] and [p+1..hi]
+        if p - lo + 1 < hi - p:
+            quick_hoare(a, lo, p, c)
+            lo = p + 1
+        else:
+            quick_hoare(a, p + 1, hi, c)
+            hi = p
+
+
+# ---------------------------------------------------------------- Randomised
+def quick_random(a, lo, hi, c):
+    while lo < hi:
+        r = random.randint(lo, hi)
+        a[r], a[hi] = a[hi], a[r]              # move random pivot to the end
+        p = lomuto_partition(a, lo, hi, c)
+        if p - lo < hi - p:
+            quick_random(a, lo, p - 1, c)
+            lo = p + 1
+        else:
+            quick_random(a, p + 1, hi, c)
+            hi = p - 1
+
+
+# ---------------------------------------------------------------- Three-way
+def quick_3way(a, lo, hi, c):
+    while lo < hi:
+        pivot = a[hi]
+        lt, i, gt = lo, lo, hi
+        while i <= gt:
+            c[0] += 1                          # a[i] < pivot ?
+            if a[i] < pivot:
+                a[lt], a[i] = a[i], a[lt]
+                lt += 1
+                i += 1
+            else:
+                c[0] += 1                      # a[i] > pivot ?
+                if a[i] > pivot:
+                    a[i], a[gt] = a[gt], a[i]
+                    gt -= 1
+                else:
+                    i += 1
+        # [lo..lt-1] < pivot, [lt..gt] == pivot, [gt+1..hi] > pivot
+        if lt - lo < hi - gt:
+            quick_3way(a, lo, lt - 1, c)
+            lo = gt + 1
+        else:
+            quick_3way(a, gt + 1, hi, c)
+            hi = lt - 1
+
+
+VARIANTS = {
+    "Lomuto": quick_lomuto,
+    "Hoare": quick_hoare,
+    "Randomised": quick_random,
+    "3-way": quick_3way,
+}
+
+
+# ---------------------------------------------------------------- Inputs
+def make_input(kind, n):
+    if kind == "random":
+        a = list(range(n))
+        random.shuffle(a)
+        return a
+    if kind == "sorted":
+        return list(range(n))
+    if kind == "reverse":
+        return list(range(n, 0, -1))
+    if kind == "duplicates":
+        return [random.randint(0, 9) for _ in range(n)]
+    raise ValueError(kind)
+
+
+def run(name, data):
+    a = data[:]
+    c = [0]
+    t0 = time.perf_counter()
+    VARIANTS[name](a, 0, len(a) - 1, c)
+    elapsed = time.perf_counter() - t0
+    assert a == sorted(data), f"{name} produced a wrong result"
+    return c[0], elapsed
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--max-n", type=int, default=16000)
+    args = ap.parse_args()
+
+    sizes = [n for n in (1000, 2000, 4000, 8000, 16000) if n <= args.max_n]
+    kinds = ["random", "sorted", "reverse", "duplicates"]
+    rows = []
+
+    for kind in kinds:
+        print(f"\n=== Input: {kind} ===")
+        print(f"{'n':>7} | " + " | ".join(f"{v:^26}" for v in VARIANTS))
+        print(f"{'':>7} | " + " | ".join(f"{'comparisons':>14}{'time (s)':>12}" for _ in VARIANTS))
+        print("-" * (10 + 29 * len(VARIANTS)))
+        for n in sizes:
+            data = make_input(kind, n)
+            cells = []
+            for name in VARIANTS:
+                comps, secs = run(name, data)
+                rows.append([kind, n, name, comps, round(secs, 6)])
+                cells.append(f"{comps:>14,}{secs:>12.4f}")
+            print(f"{n:>7} | " + " | ".join(cells))
+
+    with open("q1_results.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["input", "n", "variant", "comparisons", "seconds"])
+        w.writerows(rows)
+    print("\nSaved q1_results.csv")
+
+
+if __name__ == "__main__":
+    main()

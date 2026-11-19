@@ -1,10 +1,13 @@
-# CSF302_AS26_02230309
+# Lab 1 - Output Screenshots
 
-Lab: Empirical Growth Rate Measurement and Algorithm Benchmarking
 
-## Structure
-- `Lab1_AS26/` — Lab 1 source code
-  - `Lab1_Q1_LinearSearch.py`, `Lab1_Q1_BinarySearch.py`, `Lab1_Q1_Benchmark.py`
-  - `Lab1_Q2_BubbleSort.py`, `Lab1_Q2_MergeSort.py`, `Lab1_Q2_Benchmark.py`
-  - `Lab1_Q3_NaiveTrialDivision.py`, `Lab1_Q3_OptimizedTrialDivision.py`, `Lab1_Q3_SieveOfEratosthenes.py`, `Lab1_Q3_Benchmark.py`
-  - `Output_Screenshots.md` — screenshots of benchmark output
+## Question 1 - Linear Search vs Binary Search
+![Q1 Output](image.png)
+
+
+## Question 2 - Bubble Sort vs Merge Sort
+![Q2 Output](image-1.png)
+
+
+## Question 3 - Prime Generation Methods
+![Q3 output](image-2.png)
